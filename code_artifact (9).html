@@ -7,8 +7,18 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;900&display=swap" rel="stylesheet">
-    
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
+        /* التصميم الافتراضي للشاشات الكبيرة هنا */
+
+/* التصميم المخصص لشاشات الجوال (أصغر من 768 بكسل) */
+@media (max-width: 768px) {
+  .container {
+    flex-direction: column;
+    width: 100%;
+    padding: 10px;
+  }
+}
         body {
             font-family: 'Cairo', sans-serif;
             background-color: #0b1120;
