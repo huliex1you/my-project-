@@ -259,17 +259,50 @@
     </div>
 
     <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-
         let GITHUB_USERNAME = localStorage.getItem('ai_portfolio_username') || 'huliex1you';
         let CUSTOM_API_URL = localStorage.getItem('ai_portfolio_api_url') || '';
+        const PROJECT_CACHE_KEY = 'ai_portfolio_projects_v1';
+        const AUTO_REFRESH_MS = 5 * 60 * 1000;
         
         let allProjects = []; 
         let currentFilter = 'All'; 
         let searchQuery = '';
         let currentActiveProject = null; 
+        let isFetchingProjects = false;
+
+        function getCachedProjects() {
+            try {
+                const cached = JSON.parse(localStorage.getItem(PROJECT_CACHE_KEY));
+                return Array.isArray(cached) ? cached : [];
+            } catch (error) {
+                console.warn('تعذر قراءة المشاريع المحفوظة محلياً:', error);
+                return [];
+            }
+        }
+
+        function renderLoadedProjects(projects) {
+            allProjects = projects;
+            const languages = new Set(['All']);
+            allProjects.forEach(repo => {
+                if (repo.language) languages.add(repo.language);
+                getProjectData(repo.name);
+            });
+            renderFilters(Array.from(languages));
+            applyFiltersAndSearch();
+            populateProjectDropdown(allProjects);
+        }
+
+        async function fetchWithTimeout(url, timeoutMs = 12000) {
+            let timeoutId;
+            const timeout = new Promise((_, reject) => {
+                timeoutId = setTimeout(() => reject(new Error('انتهت مهلة الاتصال بـ GitHub')), timeoutMs);
+            });
+            try {
+                return await Promise.race([fetch(url), timeout]);
+            } finally {
+                clearTimeout(timeoutId);
+            }
+        }
         
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'ai-portfolio';
         let firebaseConfig = {};
@@ -277,19 +310,28 @@
             if (typeof __firebase_config !== 'undefined') firebaseConfig = JSON.parse(__firebase_config);
         } catch (e) { console.warn("Firebase config not found."); }
 
-        const app = initializeApp(firebaseConfig);
-        const db = getFirestore(app);
-        const auth = getAuth(app);
+        let db = null;
+        let auth = null;
+        let firestore = {};
         let currentUser = null;
 
         let projectCustomData = JSON.parse(localStorage.getItem('ai_portfolio_custom_data_v3')) || {};
 
         async function initCloudSync() {
             try {
+                const [appModule, authModule, firestoreModule] = await Promise.all([
+                    import("https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js"),
+                    import("https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js"),
+                    import("https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js")
+                ]);
+                const app = appModule.initializeApp(firebaseConfig);
+                auth = authModule.getAuth(app);
+                db = firestoreModule.getFirestore(app);
+                firestore = firestoreModule;
                 if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-                    await signInWithCustomToken(auth, __initial_auth_token);
+                    await authModule.signInWithCustomToken(auth, __initial_auth_token);
                 } else {
-                    await signInAnonymously(auth);
+                    await authModule.signInAnonymously(auth);
                 }
                 currentUser = auth.currentUser;
                 if (currentUser) {
@@ -303,8 +345,8 @@
         }
 
         function setupRealtimeListener() {
-            const docRef = doc(db, 'artifacts', appId, 'users', currentUser.uid, 'portfolio', 'customDataV3');
-            onSnapshot(docRef, (docSnap) => {
+            const docRef = firestore.doc(db, 'artifacts', appId, 'users', currentUser.uid, 'portfolio', 'customDataV3');
+            firestore.onSnapshot(docRef, (docSnap) => {
                 if (docSnap.exists()) {
                     projectCustomData = docSnap.data();
                     localStorage.setItem('ai_portfolio_custom_data_v3', JSON.stringify(projectCustomData));
@@ -324,10 +366,10 @@
         async function saveAllData() {
             localStorage.setItem('ai_portfolio_custom_data_v3', JSON.stringify(projectCustomData));
             if (!currentUser) return;
-            const docRef = doc(db, 'artifacts', appId, 'users', currentUser.uid, 'portfolio', 'customDataV3');
+            const docRef = firestore.doc(db, 'artifacts', appId, 'users', currentUser.uid, 'portfolio', 'customDataV3');
             try {
                 document.getElementById('cloud-icon').classList.add('animate-pulse', 'text-cyan-400');
-                await setDoc(docRef, projectCustomData, { merge: true });
+                await firestore.setDoc(docRef, projectCustomData, { merge: true });
                 setTimeout(() => document.getElementById('cloud-icon').classList.remove('animate-pulse', 'text-cyan-400'), 1000);
             } catch (error) {
                 console.error("حفظ سحابي فاشل:", error);
@@ -375,6 +417,8 @@
         };
 
         window.fetchGitHubProjects = async function() {
+            if (isFetchingProjects) return;
+            isFetchingProjects = true;
             const syncIcon = document.getElementById('sync-icon');
             if(syncIcon) syncIcon.classList.add('fa-spin');
             
@@ -386,17 +430,13 @@
             let apiUrl = CUSTOM_API_URL || `https://api.github.com/users/${GITHUB_USERNAME}/repos?sort=updated&per_page=100`;
 
             try {
-                const response = await fetch(apiUrl);
+                const response = await fetchWithTimeout(apiUrl);
                 if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
                 
                 const data = await response.json();
-                allProjects = Array.isArray(data) ? data.filter(repo => !repo.fork) : []; 
-                
-                const languages = new Set(['All']);
-                allProjects.forEach(repo => {
-                    if (repo.language) languages.add(repo.language);
-                    getProjectData(repo.name); 
-                });
+                const projects = Array.isArray(data) ? data.filter(repo => !repo.fork) : [];
+                localStorage.setItem(PROJECT_CACHE_KEY, JSON.stringify(projects));
+                renderLoadedProjects(projects);
                 
                 saveAllData();
                 
@@ -410,27 +450,32 @@
             } catch (error) {
                 console.warn("GitHub API fetch failed or rate-limited. Falling back to cached projects if available:", error);
                 
-                // Fallback mock or cached repositories if GitHub blocks fetch in iframe
+                // Keep the platform useful offline by displaying the latest successful result.
                 if (allProjects.length === 0) {
-                    allProjects = [
-                        { name: "hesap-alrwateb", description: "حاسبة الرواتب والبدلات الذكية", language: "HTML", stargazers_count: 1, updated_at: new Date().toISOString(), html_url: `https://github.com/${GITHUB_USERNAME}/hesap-alrwateb` },
-                        { name: "TAMENAT2", description: "نظام إدارة التأمين الذكي", language: "JavaScript", stargazers_count: 2, updated_at: new Date().toISOString(), html_url: `https://github.com/${GITHUB_USERNAME}/TAMENAT2` }
-                    ];
-                    allProjects.forEach(repo => getProjectData(repo.name));
-                    renderFilters(['All', 'HTML', 'JavaScript']);
-                    applyFiltersAndSearch();
-                    populateProjectDropdown(allProjects);
+                    const cachedProjects = getCachedProjects();
+                    if (cachedProjects.length > 0) {
+                        renderLoadedProjects(cachedProjects);
+                    } else {
+                        document.getElementById('error-message').classList.remove('hidden');
+                    }
                 }
                 
                 document.getElementById('loading-message').classList.add('hidden');
             } finally {
+                isFetchingProjects = false;
                 if(syncIcon) syncIcon.classList.remove('fa-spin');
             }
         };
 
         document.addEventListener('DOMContentLoaded', () => {
             initCloudSync();
+            const cachedProjects = getCachedProjects();
+            if (cachedProjects.length > 0) renderLoadedProjects(cachedProjects);
             window.fetchGitHubProjects();
+            setInterval(() => window.fetchGitHubProjects(), AUTO_REFRESH_MS);
+            document.addEventListener('visibilitychange', () => {
+                if (!document.hidden) window.fetchGitHubProjects();
+            });
         });
 
         function populateProjectDropdown(projects) {
