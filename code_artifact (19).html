@@ -1,0 +1,1229 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>منصة إدارة الحضور والغياب للمدارس</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: {
+                            900: '#001D39',
+                            800: '#0A4174',
+                            700: '#49769F',
+                            600: '#4E8EA2',
+                            500: '#6EA2B3',
+                            400: '#7BBDE8',
+                            300: '#BDD8E9',
+                        },
+                        bgLight: '#f3f4f6',
+                    },
+                    fontFamily: {
+                        sans: ['Tajawal', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+    <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- SheetJS for Excel Upload/Download -->
+    <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
+    <!-- SweetAlert2 for Alerts -->
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    
+    <style>
+        body {
+            font-family: 'Tajawal', sans-serif;
+            background-color: #f0f4f8;
+        }
+        .sidebar {
+            background-color: #0A4174;
+            color: white;
+            transition: all 0.3s ease-in-out;
+        }
+        .sidebar-item:hover, .sidebar-item.active {
+            background-color: #001D39;
+            border-right: 4px solid #7BBDE8;
+        }
+        .card {
+            background-color: white;
+            border-radius: 1rem;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        }
+        .chart-placeholder {
+            background: linear-gradient(135deg, #fdfbfb 0%, #ebedee 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #49769F;
+            font-weight: 500;
+        }
+        .badge-present { background-color: #d1fae5; color: #065f46; }
+        .badge-absent { background-color: #fee2e2; color: #991b1b; }
+        .badge-excused { background-color: #fef3c7; color: #92400e; }
+        .badge-new { background-color: #e0e7ff; color: #3730a3; }
+        .badge-resigned { background-color: #f3f4f6; color: #374151; }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    </style>
+</head>
+<body class="flex h-screen overflow-hidden text-gray-800">
+
+    <div id="login-modal" class="fixed inset-0 z-50 bg-primary-900 flex items-center justify-center p-4">
+        <div class="card w-full max-w-md p-8 shadow-2xl border-t-8 border-primary-500">
+            <div class="text-center mb-6">
+                <h1 class="text-3xl font-extrabold text-primary-900 mb-2">منصة <span class="text-primary-600">حضور</span></h1>
+                <p class="text-sm text-gray-500">تسجيل الدخول للمشرف أو مدخل البيانات</p>
+            </div>
+            <form onsubmit="handleLogin(event)" class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">البريد الإلكتروني</label>
+                    <input type="email" id="login-email" required placeholder="admin@admin.com" class="w-full border border-gray-300 rounded px-3 py-2.5 text-sm focus:outline-none focus:border-primary-500 bg-gray-50">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">كلمة المرور</label>
+                    <input type="password" id="login-password" required placeholder="••••••••" class="w-full border border-gray-300 rounded px-3 py-2.5 text-sm focus:outline-none focus:border-primary-500 bg-gray-50">
+                </div>
+                <button type="submit" class="w-full bg-primary-600 hover:bg-primary-700 text-white font-bold py-3 rounded-lg transition shadow-md">
+                    دخول المنصة
+                </button>
+            </form>
+            <div class="mt-6 text-center text-xs text-gray-400 border-t pt-4">
+                بيانات المشرف الافتراضي: <span class="font-bold text-gray-600">admin@admin.com</span> / كلمة المرور: <span class="font-bold text-gray-600">admin123</span>
+            </div>
+        </div>
+    </div>
+
+    <aside class="sidebar w-64 flex flex-col hidden md:flex h-full shadow-lg z-20" id="sidebar-container">
+        <div class="p-6 flex items-center justify-center border-b border-primary-700">
+            <h1 class="text-2xl font-bold tracking-wider text-white">منصة <span class="text-primary-400">حضور</span></h1>
+        </div>
+
+        <div class="p-6 flex flex-col items-center border-b border-primary-700">
+            <img src="https://i.pravatar.cc/150?img=11" alt="المشرف" class="w-20 h-20 rounded-full border-4 border-primary-500 mb-3 object-cover shadow-sm">
+            <h2 class="text-lg font-semibold" id="current-user-name">أحمد المشرف</h2>
+            <p class="text-sm text-primary-300" id="current-user-role">مدير النظام</p>
+        </div>
+
+        <nav class="flex-1 overflow-y-auto py-4">
+            <ul class="space-y-1" id="sidebar-menu-list">
+                <li>
+                    <a href="#" class="sidebar-item active flex items-center px-6 py-3 transition-colors" onclick="showSection('dashboard')">
+                        <i class="fas fa-chart-pie w-6 ml-2 text-primary-400"></i>
+                        <span>لوحة القيادة</span>
+                    </a>
+                </li>
+                <li>
+                    <a href="#" class="sidebar-item flex items-center px-6 py-3 transition-colors" onclick="showSection('attendance')">
+                        <i class="fas fa-clipboard-list w-6 ml-2 text-primary-400"></i>
+                        <span>سجل الحضور والغياب</span>
+                    </a>
+                </li>
+                <li>
+                    <a href="#" class="sidebar-item flex items-center px-6 py-3 transition-colors" onclick="showSection('excuses')">
+                        <i class="fas fa-file-medical w-6 ml-2 text-primary-400"></i>
+                        <span>الأعذار والمرفقات</span>
+                    </a>
+                </li>
+                <li>
+                    <a href="#" class="sidebar-item flex items-center px-6 py-3 transition-colors" onclick="showSection('staff')">
+                        <i class="fas fa-users w-6 ml-2 text-primary-400"></i>
+                        <span>شؤون الموظفين</span>
+                    </a>
+                </li>
+                <li>
+                    <a href="#" class="sidebar-item flex items-center px-6 py-3 transition-colors" onclick="showSection('departments')">
+                        <i class="fas fa-building w-6 ml-2 text-primary-400"></i>
+                        <span>الأقسام والمراحل</span>
+                    </a>
+                </li>
+                <li id="menu-accounts">
+                    <a href="#" class="sidebar-item flex items-center px-6 py-3 transition-colors" onclick="showSection('accounts')">
+                        <i class="fas fa-user-shield w-6 ml-2 text-primary-400"></i>
+                        <span>حسابات المدخلين</span>
+                    </a>
+                </li>
+                <li>
+                    <a href="#" class="sidebar-item flex items-center px-6 py-3 transition-colors" onclick="showSection('fingerprint')">
+                        <i class="fas fa-fingerprint w-6 ml-2 text-primary-400"></i>
+                        <span>رفع سجل البصمة أو الإكسل</span>
+                    </a>
+                </li>
+                <li id="menu-reports">
+                    <a href="#" class="sidebar-item flex items-center px-6 py-3 transition-colors" onclick="showSection('reports')">
+                        <i class="fas fa-chart-line w-6 ml-2 text-primary-400"></i>
+                        <span>التقارير</span>
+                    </a>
+                </li>
+                <li id="menu-settings">
+                    <a href="#" class="sidebar-item flex items-center px-6 py-3 transition-colors" onclick="showSection('settings')">
+                        <i class="fas fa-cog w-6 ml-2 text-primary-400"></i>
+                        <span>الإعدادات</span>
+                    </a>
+                </li>
+            </ul>
+        </nav>
+        
+        <div class="p-4 border-t border-primary-700">
+            <button onclick="handleLogout()" class="w-full flex items-center justify-center px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded transition-colors shadow-sm">
+                <i class="fas fa-sign-out-alt ml-2"></i>
+                تسجيل الخروج
+            </button>
+        </div>
+    </aside>
+
+    <main class="flex-1 flex flex-col h-full overflow-hidden bg-[#eef2f6]">
+        
+        <header class="bg-white shadow-sm z-10 flex justify-between items-center px-6 py-4">
+            <div class="flex items-center">
+                <button class="md:hidden text-primary-800 hover:text-primary-600 focus:outline-none ml-4">
+                    <i class="fas fa-bars text-2xl"></i>
+                </button>
+                <div class="relative w-64 md:w-96">
+                    <span class="absolute inset-y-0 right-0 flex items-center pr-3">
+                        <i class="fas fa-search text-gray-400"></i>
+                    </span>
+                    <input type="text" placeholder="بحث عن موظف، عذر، قسم..." class="w-full pl-4 pr-10 py-2 border border-gray-300 rounded-full focus:outline-none focus:border-primary-500 bg-gray-50 text-sm">
+                </div>
+            </div>
+            
+            <div class="flex items-center space-x-4 space-x-reverse">
+                <button class="relative p-2 text-gray-500 hover:text-primary-600 transition-colors">
+                    <i class="fas fa-bell text-xl"></i>
+                    <span class="absolute top-1 right-1 flex h-3 w-3">
+                        <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                        <span class="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
+                    </span>
+                </button>
+                <button class="p-2 text-gray-500 hover:text-primary-600 transition-colors">
+                    <i class="fas fa-moon text-xl"></i>
+                </button>
+            </div>
+        </header>
+
+        <div class="flex-1 overflow-x-hidden overflow-y-auto p-6" id="main-container">
+            
+            <!-- Dashboard Section -->
+            <section id="dashboard" class="space-y-6 block">
+                <div class="flex justify-between items-center">
+                    <h2 class="text-2xl font-bold text-primary-900">نظرة عامة - جميع الأقسام</h2>
+                    <select class="border border-gray-300 rounded px-3 py-2 bg-white text-sm focus:outline-none focus:border-primary-500">
+                        <option>اليوم</option>
+                        <option>هذا الأسبوع</option>
+                        <option>هذا الشهر</option>
+                    </select>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                    <div class="card p-6 flex items-center justify-between border-b-4 border-primary-500">
+                        <div>
+                            <p class="text-sm text-gray-500 mb-1">إجمالي الموظفين</p>
+                            <h3 class="text-3xl font-bold text-gray-800" id="stat-total-emps">0</h3>
+                        </div>
+                        <div class="w-12 h-12 rounded-full bg-primary-100 flex items-center justify-center text-primary-600">
+                            <i class="fas fa-users text-xl"></i>
+                        </div>
+                    </div>
+                    
+                    <div class="card p-6 flex items-center justify-between border-b-4 border-green-500">
+                        <div>
+                            <p class="text-sm text-gray-500 mb-1">الحضور اليوم</p>
+                            <h3 class="text-3xl font-bold text-gray-800" id="stat-present">0</h3>
+                        </div>
+                        <div class="w-12 h-12 rounded-full bg-green-100 flex items-center justify-center text-green-600">
+                            <i class="fas fa-check-circle text-xl"></i>
+                        </div>
+                    </div>
+
+                    <div class="card p-6 flex items-center justify-between border-b-4 border-yellow-500">
+                        <div>
+                            <p class="text-sm text-gray-500 mb-1">غياب بعذر (معتمد)</p>
+                            <h3 class="text-3xl font-bold text-gray-800" id="stat-excused">0</h3>
+                        </div>
+                        <div class="w-12 h-12 rounded-full bg-yellow-100 flex items-center justify-center text-yellow-600">
+                            <i class="fas fa-file-alt text-xl"></i>
+                        </div>
+                    </div>
+
+                    <div class="card p-6 flex items-center justify-between border-b-4 border-red-500">
+                        <div>
+                            <p class="text-sm text-gray-500 mb-1">غياب بدون عذر</p>
+                            <h3 class="text-3xl font-bold text-gray-800" id="stat-absent">0</h3>
+                        </div>
+                        <div class="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center text-red-600">
+                            <i class="fas fa-times-circle text-xl"></i>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-6">
+                    <div class="card p-6 lg:col-span-2">
+                        <div class="flex justify-between items-center mb-4">
+                            <h3 class="text-lg font-semibold text-gray-800">معدل الحضور خلال الشهر</h3>
+                            <button class="text-primary-600 hover:text-primary-800"><i class="fas fa-ellipsis-v"></i></button>
+                        </div>
+                        <div class="chart-placeholder h-64 rounded border border-dashed border-gray-300">
+                            <div class="text-center">
+                                <i class="fas fa-chart-area text-4xl mb-2 text-primary-300"></i>
+                                <p>رسم بياني خطي لمعدل الحضور</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card p-6">
+                        <div class="flex justify-between items-center mb-4">
+                            <h3 class="text-lg font-semibold text-gray-800">الغياب حسب القسم</h3>
+                        </div>
+                        <div class="chart-placeholder h-48 rounded border border-dashed border-gray-300 mb-4">
+                            <div class="text-center">
+                                <i class="fas fa-chart-pie text-4xl mb-2 text-primary-300"></i>
+                                <p>رسم دائري للأقسام</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Attendance Section -->
+            <section id="attendance" class="space-y-6 hidden">
+                <div class="flex justify-between items-center">
+                    <h2 class="text-2xl font-bold text-primary-900">مسير الحضور والغياب</h2>
+                    <div class="flex space-x-2 space-x-reverse">
+                        <button class="bg-primary-600 hover:bg-primary-700 text-white px-4 py-2 rounded text-sm transition shadow">
+                            <i class="fas fa-file-excel ml-1"></i> تصدير Excel
+                        </button>
+                        <button class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded text-sm transition shadow">
+                            <i class="fas fa-save ml-1"></i> حفظ البيانات للشهر
+                        </button>
+                    </div>
+                </div>
+
+                <div class="card p-4 flex flex-wrap gap-4 items-end bg-gray-50 border border-gray-200">
+                    <div class="flex-1 min-w-[200px]">
+                        <label class="block text-sm font-medium text-gray-700 mb-1">القسم العام</label>
+                        <select id="general-dept-filter" onchange="renderAttendance()" class="w-full border-gray-300 rounded-md shadow-sm bg-white p-2 border">
+                            <option value="all">جميع الأقسام العامة</option>
+                        </select>
+                    </div>
+                    <div class="flex-1 min-w-[200px]">
+                        <label class="block text-sm font-medium text-gray-700 mb-1">المرحلة الدراسية</label>
+                        <select id="stage-filter" onchange="renderAttendance()" class="w-full border-gray-300 rounded-md shadow-sm bg-white p-2 border">
+                            <option value="all">جميع المراحل</option>
+                        </select>
+                    </div>
+                    <div class="flex-1 min-w-[200px]">
+                        <label class="block text-sm font-medium text-gray-700 mb-1">فترة المسير (الدورة)</label>
+                        <select id="attendance-cycle-filter" class="w-full border-gray-300 rounded-md shadow-sm bg-white p-2 border">
+                        </select>
+                    </div>
+                </div>
+
+                <div class="card overflow-hidden">
+                    <div class="overflow-x-auto no-scrollbar relative">
+                        <table class="w-full text-sm text-right text-gray-500 border-collapse">
+                            <thead class="text-xs text-white uppercase bg-primary-800 sticky top-0 z-10">
+                                <tr>
+                                    <th scope="col" class="px-3 py-3 border border-primary-700 w-10 text-center">الرقم</th>
+                                    <th scope="col" class="px-6 py-3 border border-primary-700 whitespace-nowrap min-w-[200px]">الإسم رباعي</th>
+                                    <th scope="col" class="px-4 py-3 border border-primary-700 whitespace-nowrap">الرقم الوظيفي</th>
+                                    <th scope="col" class="px-4 py-3 border border-primary-700 whitespace-nowrap">رقم الهوية</th>
+                                    <th scope="col" class="px-4 py-3 border border-primary-700 whitespace-nowrap">رقم الجوال</th>
+                                    <th scope="col" class="px-4 py-3 border border-primary-700 whitespace-nowrap">المسمى الوظيفي</th>
+                                    <th scope="col" class="px-4 py-3 border border-primary-700 whitespace-nowrap text-center">تاريخ المباشرة</th>
+                                    <th scope="col" class="px-2 py-3 border border-primary-700 text-center bg-primary-900" title="بدون عذر">ب.ع</th>
+                                    <th scope="col" class="px-2 py-3 border border-primary-700 text-center bg-primary-900" title="خصم">خ.أ</th>
+                                    <th scope="col" class="px-2 py-3 border border-primary-700 text-center bg-primary-900" title="بعذر">ع</th>
+                                    <th scope="col" class="px-6 py-3 border border-primary-700 text-center min-w-[200px]">مستند حالة العذر</th>
+                                    <th scope="col" class="px-3 py-3 border border-primary-700 text-center bg-primary-700 text-white font-bold">إجمالي الغياب</th>
+                                    <th scope="col" class="px-4 py-3 border border-primary-700 text-center">تاريخ الاستقالة</th>
+                                    <th scope="col" class="px-3 py-3 border border-primary-700 text-center">التأخير (د)</th>
+                                    <th scope="col" class="px-6 py-3 border border-primary-700 text-center">ملاحظات</th>
+                                </tr>
+                            </thead>
+                            <tbody id="attendance-table-body" class="bg-white">
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <section id="excuses" class="hidden">
+                <div class="card p-8 text-center text-gray-500">
+                    <i class="fas fa-file-medical text-5xl mb-4 text-primary-300"></i>
+                    <h2 class="text-2xl font-bold text-gray-700 mb-2">قسم الأعذار والمرفقات</h2>
+                    <p>مراجعة الإجازات المرضية والاضطرارية والمستندات الطبية.</p>
+                </div>
+            </section>
+            
+            <section id="staff" class="hidden space-y-6">
+                <div class="flex justify-between items-center">
+                    <h2 class="text-2xl font-bold text-primary-900">شؤون الموظفين</h2>
+                    <span class="bg-primary-100 text-primary-800 px-3 py-1 rounded-full text-sm font-bold shadow-sm" id="staff-count">0 موظف</span>
+                </div>
+                <div class="card overflow-hidden">
+                    <div class="overflow-x-auto no-scrollbar">
+                        <table class="w-full text-sm text-right text-gray-500">
+                            <thead class="text-xs text-white uppercase bg-primary-800">
+                                <tr>
+                                    <th class="px-4 py-3 border border-primary-700">الاسم</th>
+                                    <th class="px-4 py-3 border border-primary-700">الرقم الوظيفي</th>
+                                    <th class="px-4 py-3 border border-primary-700">الهوية</th>
+                                    <th class="px-4 py-3 border border-primary-700">الجوال</th>
+                                    <th class="px-4 py-3 border border-primary-700">الوظيفة</th>
+                                    <th class="px-4 py-3 border border-primary-700">القسم العام</th>
+                                    <th class="px-4 py-3 border border-primary-700">المرحلة</th>
+                                    <th class="px-4 py-3 border border-primary-700">الحالة</th>
+                                </tr>
+                            </thead>
+                            <tbody id="staff-table-body" class="bg-white divide-y divide-gray-200">
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <section id="departments" class="hidden space-y-6">
+                <div class="flex justify-between items-center">
+                    <h2 class="text-2xl font-bold text-primary-900">الأقسام العامة والمراحل</h2>
+                </div>
+                <div id="departments-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                </div>
+            </section>
+
+            <section id="accounts" class="hidden space-y-6">
+                <div class="flex justify-between items-center">
+                    <h2 class="text-2xl font-bold text-primary-900">إدارة حسابات مدخلي البيانات</h2>
+                </div>
+                
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    <div class="card p-6 lg:col-span-1 border-t-4 border-primary-500">
+                        <h3 class="text-lg font-bold mb-4 text-gray-800">إنشاء حساب جديد</h3>
+                        <form id="create-user-form" onsubmit="handleCreateUser(event)" class="space-y-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">البريد الإلكتروني</label>
+                                <input type="email" id="new-user-email" required class="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:border-primary-500">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">كلمة المرور</label>
+                                <input type="password" id="new-user-pass" required class="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:border-primary-500">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">الصلاحية (القسم العام / المرحلة)</label>
+                                <select id="new-user-dept" required class="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:border-primary-500 bg-white">
+                                    <option value="" disabled selected>اختر المرحلة أو القسم</option>
+                                </select>
+                            </div>
+                            <button type="submit" class="w-full bg-primary-600 hover:bg-primary-700 text-white font-medium py-2 px-4 rounded transition shadow-sm mt-4">
+                                حفظ الحساب
+                            </button>
+                        </form>
+                    </div>
+
+                    <div class="card overflow-hidden lg:col-span-2 flex flex-col">
+                        <div class="p-4 border-b bg-gray-50">
+                            <h3 class="text-lg font-bold text-gray-800">حسابات المدخلين الحالية</h3>
+                        </div>
+                        <div class="overflow-x-auto flex-1 p-0">
+                            <table class="w-full text-sm text-right text-gray-500">
+                                <thead class="text-xs text-white uppercase bg-primary-800">
+                                    <tr>
+                                        <th class="px-4 py-3 border border-primary-700">البريد الإلكتروني</th>
+                                        <th class="px-4 py-3 border border-primary-700 w-1/2">القسم / المرحلة المصرح بها</th>
+                                        <th class="px-4 py-3 border border-primary-700 text-center">إجراء</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="users-table-body" class="bg-white divide-y divide-gray-200">
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section id="fingerprint" class="hidden space-y-6">
+                <div class="flex justify-between items-center">
+                    <h2 class="text-2xl font-bold text-primary-900">رفع سجل البصمة أو الإكسل</h2>
+                </div>
+                
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
+                    <div class="card p-6 border-t-4 border-green-500 shadow-sm hover:shadow-md transition flex flex-col justify-between">
+                        <div>
+                            <h3 class="text-lg font-bold mb-3 text-gray-800">
+                                <i class="fas fa-file-excel text-green-600 ml-2"></i> تأسيس / تحديث بيانات الموظفين (Excel)
+                            </h3>
+                            <p class="text-sm text-gray-600 mb-4 leading-relaxed">
+                                قم بررفع ملف Excel يحتوي على الأعمدة: (الاسم، الرقم الوظيفي، الهوية، الجوال، المسمى الوظيفي، القسم العام، المرحلة، المدير، الحالة، تاريخ المباشرة).
+                            </p>
+                        </div>
+                        <div class="flex flex-col gap-3 mt-4">
+                            <label class="block w-full cursor-pointer bg-green-50 text-green-700 border border-green-200 hover:bg-green-100 rounded text-center p-3 font-semibold transition">
+                                <i class="fas fa-upload ml-2"></i> اختر ملف إكسل للرفع
+                                <input type="file" id="excel-file-upload" accept=".xlsx, .xls" class="hidden" onchange="handleExcelUpload(event)">
+                            </label>
+                            <button onclick="downloadExcelTemplate()" class="text-sm text-primary-600 hover:text-primary-800 text-right w-fit">
+                                <i class="fas fa-download ml-1"></i> تحميل نموذج Excel فارغ للتعبئة
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="card p-6 border-t-4 border-blue-500 shadow-sm hover:shadow-md transition">
+                        <h3 class="text-lg font-bold mb-3 text-gray-800">
+                            <i class="fas fa-fingerprint text-blue-600 ml-2"></i> رفع بيانات الحضور والانصراف (بصمة)
+                        </h3>
+                        <p class="text-sm text-gray-600 mb-4 leading-relaxed">
+                            اختر دورة المسير (من 16 الشهر السابق إلى 15 الحالي) ثم ارفع ملف البصمة لتحديث أوقات الحضور والغياب تلقائياً.
+                        </p>
+                        
+                        <div class="mb-4">
+                            <label class="block text-sm font-medium text-gray-700 mb-1">اختر الدورة (الشهر)</label>
+                            <select id="fingerprint-cycle" class="w-full border-gray-300 rounded-md shadow-sm bg-gray-50 p-2.5 border">
+                            </select>
+                        </div>
+
+                        <label class="block w-full cursor-pointer bg-blue-50 text-blue-700 border-2 border-dashed border-blue-300 hover:bg-blue-100 rounded-lg text-center p-4 transition mt-2">
+                            <i class="fas fa-cloud-upload-alt text-2xl mb-2 block"></i>
+                            <span class="font-bold text-sm">اختر ملف البصمة</span>
+                            <input type="file" id="fingerprint-file-upload" accept=".xlsx, .xls, .csv" class="hidden" onchange="handleFingerprintUpload(event)">
+                        </label>
+                    </div>
+                </div>
+            </section>
+
+            <section id="reports" class="hidden space-y-6">
+                <div class="flex justify-between items-center">
+                    <h2 class="text-2xl font-bold text-primary-900">التقارير والإحصائيات</h2>
+                </div>
+                
+                <div id="reports-empty" class="card p-8 text-center text-gray-500 block">
+                    <i class="fas fa-chart-line text-5xl mb-4 text-primary-300"></i>
+                    <h2 class="text-2xl font-bold text-gray-700 mb-2">لا توجد بيانات كافية</h2>
+                    <p>يرجى رفع بيانات الموظفين لعرض التقارير.</p>
+                </div>
+
+                <div id="reports-content" class="hidden grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div class="card p-6">
+                        <h3 class="font-bold text-lg mb-4 text-primary-800 border-b pb-2">توزيع الموظفين حسب الأقسام والمراحل</h3>
+                        <ul class="space-y-3" id="reports-dept-list"></ul>
+                    </div>
+                    <div class="card p-6">
+                        <h3 class="font-bold text-lg mb-4 text-primary-800 border-b pb-2">ملخص الحالات الوظيفية</h3>
+                        <ul class="space-y-3" id="reports-status-list"></ul>
+                    </div>
+                </div>
+            </section>
+
+            <section id="settings" class="hidden space-y-6">
+                <div class="flex justify-between items-center">
+                    <h2 class="text-2xl font-bold text-primary-900">الإعدادات وتكوين النظام</h2>
+                </div>
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <div class="card p-6 border-t-4 border-red-500 shadow-sm hover:shadow-md transition">
+                        <h3 class="text-lg font-bold mb-3 text-red-700">
+                            <i class="fas fa-exclamation-triangle ml-2"></i> منطقة الخطر وإعادة الضبط
+                        </h3>
+                        <p class="text-sm text-gray-600 mb-4 leading-relaxed">
+                            مسح جميع البيانات المخزنة محلياً لتفريغ المنصة والبدء من جديد.
+                        </p>
+                        <button onclick="clearAllData()" class="w-full bg-red-600 hover:bg-red-700 text-white font-semibold py-3 px-4 rounded transition flex justify-center items-center">
+                            <i class="fas fa-trash-alt ml-2"></i> مسح جميع بيانات المنصة
+                        </button>
+                    </div>
+                </div>
+            </section>
+
+        </div>
+    </main>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, setDoc, deleteDoc, onSnapshot, collection, getDocs, writeBatch } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // Predefined Options for Dropdowns
+        const GENERAL_DEPARTMENTS = ["الش التعليمية", "الش الإدارية", "شؤون المعلمين", "الخدمات المساندة", "العمالة التشغيلية"];
+        const STAGES = ["رياض الأطفال", "المرحلة الابتدائية", "المرحلة المتوسطة", "المرحلة الثانوية", "الإدارة العامة"];
+
+        window.currentUser = null;
+        window.appData = {
+            employees: [],
+            users: []
+        };
+
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'school-attendance-platform';
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+        
+        let app, db, auth;
+        
+        try {
+            app = initializeApp(firebaseConfig);
+            db = getFirestore(app);
+            auth = getAuth(app);
+        } catch (e) {
+            console.error("Cloud config error:", e);
+        }
+
+        async function initCloudStorage() {
+            try {
+                if (typeof __initial_auth_token !== 'undefined') {
+                    await signInWithCustomToken(auth, __initial_auth_token);
+                } else {
+                    await signInAnonymously(auth);
+                }
+                
+                if (!auth.currentUser) throw new Error("لم يتم التوثيق");
+                
+                // Show connecting alert
+                const Toast = Swal.mixin({
+                    toast: true, position: 'top-end', showConfirmButton: false, timer: 2000, timerProgressBar: true
+                });
+                Toast.fire({ icon: 'info', title: 'جاري الاتصال بقاعدة البيانات السحابية...' });
+
+                setupRealtimeListeners();
+            } catch (error) {
+                console.error("Authentication Error:", error);
+                Swal.fire('خطأ في الاتصال', 'تعذر الاتصال بقاعدة البيانات. الرجاء تحديث الصفحة.', 'error');
+            }
+        }
+
+        function setupRealtimeListeners() {
+            const employeesRef = collection(db, 'artifacts', appId, 'public', 'data', 'employees');
+            const usersRef = collection(db, 'artifacts', appId, 'public', 'data', 'platform_users');
+
+            // Listen to Employees Data
+            onSnapshot(employeesRef, (snapshot) => {
+                window.appData.employees = [];
+                snapshot.forEach(doc => {
+                    window.appData.employees.push({ id: doc.id, ...doc.data() });
+                });
+                updateAllViews();
+            }, (error) => {
+                console.error("Error fetching employees:", error);
+            });
+
+            // Listen to Users Data
+            onSnapshot(usersRef, (snapshot) => {
+                window.appData.users = [];
+                snapshot.forEach(doc => {
+                    window.appData.users.push({ id: doc.id, ...doc.data() });
+                });
+                updateAllViews();
+            }, (error) => {
+                console.error("Error fetching users:", error);
+            });
+        }
+
+        function getProp(row, possibleKeys) {
+            for (let key of possibleKeys) {
+                if (row[key] !== undefined) return row[key];
+            }
+            return '';
+        }
+
+        window.handleLogin = function(e) {
+            e.preventDefault();
+            const email = document.getElementById('login-email').value.trim();
+            const pass = document.getElementById('login-password').value.trim();
+
+            if (email === 'admin@admin.com' && pass === 'admin123') {
+                window.currentUser = { role: 'admin', email: 'admin@admin.com', name: 'أحمد المشرف', department: 'all' };
+                initSession();
+                return;
+            }
+
+            const foundUser = window.appData.users.find(u => u.email === email && u.password === pass);
+            if (foundUser) {
+                window.currentUser = { role: 'editor', email: foundUser.email, name: 'مدخل بيانات', department: foundUser.department };
+                initSession();
+                return;
+            }
+
+            Swal.fire('خطأ في البيانات', 'البريد الإلكتروني أو كلمة المرور غير صحيحة.', 'error');
+        }
+
+        function initSession() {
+            document.getElementById('login-modal').classList.add('hidden');
+            
+            if (window.currentUser.role === 'admin') {
+                document.getElementById('current-user-name').innerText = 'المشرف العام';
+                document.getElementById('current-user-role').innerText = 'مدير النظام';
+                document.getElementById('menu-accounts').style.display = 'block';
+                document.getElementById('menu-reports').style.display = 'block';
+                document.getElementById('menu-settings').style.display = 'block';
+            } else {
+                document.getElementById('current-user-name').innerText = 'مدخل بيانات';
+                document.getElementById('current-user-role').innerText = `صلاحية: ${window.currentUser.department}`;
+                document.getElementById('menu-accounts').style.display = 'none';
+                document.getElementById('menu-reports').style.display = 'none';
+                document.getElementById('menu-settings').style.display = 'none';
+                
+                // Lock filters
+                setTimeout(() => {
+                    const genFilter = document.getElementById('general-dept-filter');
+                    const stageFilter = document.getElementById('stage-filter');
+                    
+                    if(GENERAL_DEPARTMENTS.includes(window.currentUser.department) && genFilter) {
+                        genFilter.value = window.currentUser.department;
+                        genFilter.disabled = true;
+                        genFilter.classList.add('bg-gray-200');
+                    }
+                    if(STAGES.includes(window.currentUser.department) && stageFilter) {
+                        stageFilter.value = window.currentUser.department;
+                        stageFilter.disabled = true;
+                        stageFilter.classList.add('bg-gray-200');
+                    }
+                }, 100);
+            }
+
+            window.showSection('attendance'); // Default to attendance for all
+            updateAllViews();
+        }
+
+        window.handleLogout = function() {
+            window.currentUser = null;
+            document.getElementById('login-modal').classList.remove('hidden');
+            document.getElementById('login-email').value = '';
+            document.getElementById('login-password').value = '';
+        }
+
+        window.showSection = function(sectionId) {
+            const sections = document.querySelectorAll('main section');
+            sections.forEach(sec => {
+                sec.classList.remove('block');
+                sec.classList.add('hidden');
+            });
+
+            const targetSection = document.getElementById(sectionId);
+            if (targetSection) {
+                targetSection.classList.remove('hidden');
+                targetSection.classList.add('block');
+            }
+
+            const sidebarItems = document.querySelectorAll('.sidebar-item');
+            sidebarItems.forEach(item => item.classList.remove('active'));
+            
+            const clickedItem = document.querySelector(`.sidebar-item[onclick="showSection('${sectionId}')"]`);
+            if (clickedItem) clickedItem.classList.add('active');
+        }
+
+        window.handleExcelUpload = async function(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            if (!auth.currentUser) {
+                Swal.fire('خطأ', 'غير مصرح لك بتنفيذ هذه العملية.', 'error');
+                return;
+            }
+
+            const reader = new FileReader();
+            reader.onload = async function(e) {
+                try {
+                    Swal.fire({
+                        title: 'جاري رفع البيانات...',
+                        text: 'يتم الآن معالجة الملف ومزامنته مع قاعدة البيانات السحابية.',
+                        allowOutsideClick: false,
+                        didOpen: () => { Swal.showLoading(); }
+                    });
+
+                    const data = new Uint8Array(e.target.result);
+                    const workbook = XLSX.read(data, {type: 'array'});
+                    const firstSheetName = workbook.SheetNames[0];
+                    const worksheet = workbook.Sheets[firstSheetName];
+                    const json = XLSX.utils.sheet_to_json(worksheet);
+
+                    if (json.length === 0) {
+                        Swal.fire('خطأ', 'الملف فارغ', 'error');
+                        return;
+                    }
+
+                    const batch = writeBatch(db);
+                    let count = 0;
+
+                    json.forEach(row => {
+                        const name = getProp(row, ['الاسم', 'الإسم', 'اسم الموظف', 'Name']);
+                        if (!name || name === 'بدون اسم') return;
+
+                        const empId = getProp(row, ['الرقم الوظيفي', 'الرقم', 'ID']);
+                        const idCard = getProp(row, ['الهوية', 'رقم الهوية', 'National ID']);
+                        const phone = getProp(row, ['الجوال', 'رقم الجوال', 'Phone']);
+                        const job = getProp(row, ['المسمى الوظيفي', 'الوظيفة', 'Job Title']);
+                        const generalDept = getProp(row, ['القسم العام', 'القسم', 'General Dept']);
+                        const stage = getProp(row, ['المرحلة', 'المرحلة الدراسية', 'Stage']);
+                        const manager = getProp(row, ['المدير المباشر', 'Manager']);
+                        const status = getProp(row, ['الحالة', 'Status']);
+                        
+                        let rawStartDate = getProp(row, ['تاريخ المباشرة', 'المباشرة', 'Start Date']);
+                        let startDate = rawStartDate;
+                        if(typeof rawStartDate === 'number') {
+                            const date = new Date(Math.round((rawStartDate - 25569) * 86400 * 1000));
+                            startDate = date.toLocaleDateString('en-GB'); 
+                        }
+
+                        const docId = Math.random().toString(36).substr(2, 12);
+                        const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'employees', docId);
+                        
+                        batch.set(docRef, {
+                            name: name,
+                            empId: String(empId || '---'),
+                            idCard: String(idCard || '---'),
+                            phone: String(phone || '---'),
+                            job: String(job || 'معلم'),
+                            generalDept: String(generalDept || GENERAL_DEPARTMENTS[0]),
+                            stage: String(stage || STAGES[0]),
+                            manager: String(manager || 'مشرف القسم'),
+                            status: String(status || 'مستمر'),
+                            startDate: String(startDate || '2024/09/01')
+                        });
+                        count++;
+                    });
+
+                    await batch.commit();
+                    event.target.value = '';
+                    Swal.fire('اكتملت المزامنة!', `تم استيراد ${count} موظف بنجاح وحفظهم سحابياً.`, 'success');
+
+                } catch (error) {
+                    console.error(error);
+                    Swal.fire('خطأ', 'حدث خطأ أثناء قراءة أو رفع الملف.', 'error');
+                }
+            };
+            reader.readAsArrayBuffer(file);
+        }
+
+        window.clearAllData = async function() {
+            if (!auth.currentUser) return;
+            Swal.fire({
+                title: 'هل أنت متأكد؟',
+                text: "سيتم مسح جميع بيانات الموظفين والحسابات من السحابة!",
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#d33',
+                cancelButtonColor: '#49769F',
+                confirmButtonText: 'نعم، امسح البيانات!',
+                cancelButtonText: 'إلغاء'
+            }).then(async (result) => {
+                if (result.isConfirmed) {
+                    Swal.fire({ title: 'جاري الحذف...', allowOutsideClick: false, didOpen: () => { Swal.showLoading(); }});
+                    try {
+                        const batch = writeBatch(db);
+                        const empSnap = await getDocs(collection(db, 'artifacts', appId, 'public', 'data', 'employees'));
+                        empSnap.forEach(d => batch.delete(d.ref));
+                        
+                        const userSnap = await getDocs(collection(db, 'artifacts', appId, 'public', 'data', 'platform_users'));
+                        userSnap.forEach(d => batch.delete(d.ref));
+                        
+                        await batch.commit();
+                        Swal.fire('تم الحذف!', 'تم تصفير النظام بالكامل.', 'success');
+                    } catch (err) {
+                        Swal.fire('خطأ', 'حدث خطأ أثناء مسح البيانات.', 'error');
+                    }
+                }
+            })
+        }
+
+        function generateCycles() {
+            const cycles = [];
+            const currentDate = new Date();
+            let currentYear = currentDate.getFullYear();
+            let currentMonth = currentDate.getMonth();
+            const arabicMonths = ["يناير", "فبراير", "مارس", "أبريل", "مايو", "يونيو", "يوليو", "أغسطس", "سبتمبر", "أكتوبر", "نوفمبر", "ديسمبر"];
+
+            for (let i = -2; i <= 1; i++) {
+                let targetDate = new Date(currentYear, currentMonth + i, 1);
+                let tYear = targetDate.getFullYear();
+                let tMonth = targetDate.getMonth();
+                let prevMonth = tMonth - 1;
+                let prevYear = tYear;
+                if (prevMonth < 0) { prevMonth = 11; prevYear--; }
+
+                let cycleName = `دورة ${arabicMonths[tMonth]} (${tYear}): من 16 ${arabicMonths[prevMonth]} إلى 15 ${arabicMonths[tMonth]}`;
+                cycles.push(cycleName);
+            }
+            return cycles.reverse();
+        }
+
+        window.downloadExcelTemplate = function() {
+            const ws_data = [
+                ['الاسم', 'الرقم الوظيفي', 'الهوية', 'الجوال', 'المسمى الوظيفي', 'القسم العام', 'المرحلة', 'المدير المباشر', 'الحالة', 'تاريخ المباشرة'],
+                ['أحمد محمد علي', '1001', '1098273645', '0501234567', 'معلم', 'الش التعليمية', 'المرحلة الابتدائية', 'خالد عبدالله', 'مستمر', '2024/08/20'],
+                ['سارة علي أحمد', '1002', '1087654321', '0559876543', 'معلمة', 'شؤون المعلمين', 'رياض الأطفال', 'أماني منصور', 'جديد', '2024/09/01']
+            ];
+            const ws = XLSX.utils.aoa_to_sheet(ws_data);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "الموظفين");
+            XLSX.writeFile(wb, "نموذج_بيانات_المنصة.xlsx");
+        }
+
+        function updateAllViews() {
+            renderFilters();
+            window.renderAttendance();
+            renderStaff();
+            renderDepartments();
+            renderReports();
+            updateDashboardStats();
+            renderAccountsManager();
+        }
+
+        function renderFilters() {
+            const generalFilter = document.getElementById('general-dept-filter');
+            const stageFilter = document.getElementById('stage-filter');
+            const cycleSelect = document.getElementById('attendance-cycle-filter');
+            const fpCycleSelect = document.getElementById('fingerprint-cycle');
+            const userDeptSelect = document.getElementById('new-user-dept');
+            
+            const cycles = generateCycles();
+            
+            let cycleHtml = '';
+            cycles.forEach(c => cycleHtml += `<option value="${c}">${c}</option>`);
+            if(cycleSelect && cycleSelect.options.length === 0) cycleSelect.innerHTML = cycleHtml;
+            if(fpCycleSelect && fpCycleSelect.options.length === 0) fpCycleSelect.innerHTML = cycleHtml;
+
+            // General Depts Options (Only render if not restricted)
+            if(generalFilter && !generalFilter.disabled) {
+                let genHtml = `<option value="all">جميع الأقسام العامة</option>`;
+                GENERAL_DEPARTMENTS.forEach(d => genHtml += `<option value="${d}">${d}</option>`);
+                generalFilter.innerHTML = genHtml;
+                if(window.currentUser && GENERAL_DEPARTMENTS.includes(window.currentUser.department)) {
+                    generalFilter.value = window.currentUser.department;
+                }
+            }
+
+            // Stages Options
+            if(stageFilter && !stageFilter.disabled) {
+                let stageHtml = `<option value="all">جميع المراحل</option>`;
+                STAGES.forEach(s => stageHtml += `<option value="${s}">${s}</option>`);
+                stageFilter.innerHTML = stageHtml;
+                if(window.currentUser && STAGES.includes(window.currentUser.department)) {
+                    stageFilter.value = window.currentUser.department;
+                }
+            }
+
+            if(userDeptSelect && userDeptSelect.options.length <= 1) {
+                let uHtml = '<option value="" disabled selected>اختر القسم أو المرحلة للمستخدم</option>';
+                uHtml += '<option value="all">جميع الأقسام (صلاحية كاملة)</option>';
+                GENERAL_DEPARTMENTS.forEach(d => uHtml += `<option value="${d}">[قسم عام] ${d}</option>`);
+                STAGES.forEach(s => uHtml += `<option value="${s}">[مرحلة] ${s}</option>`);
+                userDeptSelect.innerHTML = uHtml;
+            }
+        }
+
+        window.renderAttendance = function() {
+            const tbody = document.getElementById('attendance-table-body');
+            const genFilterVal = document.getElementById('general-dept-filter')?.value || 'all';
+            const stageFilterVal = document.getElementById('stage-filter')?.value || 'all';
+            
+            if (!tbody) return;
+
+            let filteredEmployees = window.appData.employees;
+            
+            if (window.currentUser && window.currentUser.role === 'editor') {
+                filteredEmployees = filteredEmployees.filter(e => e.generalDept === window.currentUser.department || e.stage === window.currentUser.department);
+            } else {
+                if (genFilterVal !== 'all') {
+                    filteredEmployees = filteredEmployees.filter(e => e.generalDept === genFilterVal);
+                }
+                if (stageFilterVal !== 'all') {
+                    filteredEmployees = filteredEmployees.filter(e => e.stage === stageFilterVal);
+                }
+            }
+
+            if (filteredEmployees.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="15" class="px-6 py-8 text-center text-gray-500 bg-gray-50 border-b">لا توجد بيانات مطابقة.</td></tr>`;
+                return;
+            }
+
+            let html = '';
+            let counter = 1;
+
+            filteredEmployees.forEach(emp => {
+                let rowClass = "border-b hover:bg-gray-50 transition-colors";
+                let statusBadge = "";
+                if (emp.status === 'مستقيل') {
+                    rowClass = "border-b bg-gray-100 opacity-70";
+                    statusBadge = `<span class="mr-2 badge-resigned text-[10px] px-1.5 py-0.5 rounded">مستقيل</span>`;
+                } else if (emp.status === 'جديد') {
+                    rowClass = "border-b bg-green-50";
+                    statusBadge = `<span class="mr-2 badge-new text-[10px] px-1.5 py-0.5 rounded">جديد</span>`;
+                }
+
+                html += `
+                    <tr class="${rowClass}">
+                        <td class="px-3 py-2 border border-gray-200 text-center font-bold text-gray-700">${counter++}</td>
+                        <td class="px-6 py-2 border border-gray-200 font-medium text-gray-900">
+                            <div class="flex items-center">
+                                <div>
+                                    <div class="flex items-center text-sm">${emp.name} ${statusBadge}</div>
+                                    <p class="text-[10px] text-gray-500 mt-0.5">المدير: ${emp.manager} | القسم: ${emp.generalDept}</p>
+                                </div>
+                            </div>
+                        </td>
+                        <td class="px-4 py-2 border border-gray-200 text-center text-xs font-mono">${emp.empId}</td>
+                        <td class="px-4 py-2 border border-gray-200 text-center text-xs font-mono">${emp.idCard}</td>
+                        <td class="px-4 py-2 border border-gray-200 text-center text-xs font-mono" dir="ltr">${emp.phone}</td>
+                        <td class="px-4 py-2 border border-gray-200 text-center text-gray-700 text-xs">${emp.job}</td>
+                        <td class="px-4 py-2 border border-gray-200 text-center text-green-700 font-semibold text-xs" dir="ltr">
+                            ${emp.startDate} <br>
+                            ${emp.status === 'جديد' ? '<a href="#" class="text-[10px] text-blue-600 underline"><i class="fas fa-paperclip"></i> المباشرة</a>' : ''}
+                        </td>
+                        
+                        <td class="px-2 py-2 border border-gray-200 text-center"><input type="number" min="0" max="30" class="w-10 text-center border border-gray-300 rounded text-xs p-1" value="0"></td>
+                        <td class="px-2 py-2 border border-gray-200 text-center"><input type="number" min="0" max="30" class="w-10 text-center border border-gray-300 rounded text-xs p-1" value="0"></td>
+                        <td class="px-2 py-2 border border-gray-200 text-center"><input type="number" min="0" max="30" class="w-10 text-center border border-gray-300 rounded text-xs p-1" value="0"></td>
+                        
+                        <td class="px-4 py-2 border border-gray-200">
+                            <select class="w-full text-xs border border-gray-300 rounded p-1.5 bg-white mb-1">
+                                <option value="">- قرار حالة العذر -</option>
+                                <option value="sick">مقبول (إجازة مرضية)</option>
+                                <option value="emergency">مقبول (اضطرارية)</option>
+                                <option value="deduct">مرفوض (خصم غياب)</option>
+                            </select>
+                            <div class="text-[10px] text-gray-500 flex items-center justify-center gap-1 cursor-pointer hover:text-blue-600">
+                                <i class="fas fa-upload"></i> إرفاق عذر
+                            </div>
+                        </td>
+                        
+                        <td class="px-3 py-2 border border-gray-200 text-center font-bold bg-gray-50 text-gray-700">0</td>
+                        <td class="px-4 py-2 border border-gray-200 text-center text-xs" dir="ltr">
+                             ${emp.status === 'مستقيل' ? 'نعم<br><a href="#" class="text-[10px] text-red-600 underline"><i class="fas fa-paperclip"></i> إخلاء</a>' : '-'}
+                        </td>
+                        <td class="px-3 py-2 border border-gray-200 text-center"><input type="number" class="w-12 text-center border border-gray-300 rounded text-xs p-1" value="0"></td>
+                        <td class="px-2 py-2 border border-gray-200"><input type="text" class="w-full border border-gray-300 rounded p-1 text-xs" placeholder="ملاحظات..."></td>
+                    </tr>
+                `;
+            });
+
+            tbody.innerHTML = html;
+        }
+
+        function renderStaff() {
+            let filteredEmployees = window.appData.employees;
+            if (window.currentUser && window.currentUser.role === 'editor') {
+                filteredEmployees = filteredEmployees.filter(e => e.generalDept === window.currentUser.department || e.stage === window.currentUser.department);
+            }
+
+            document.getElementById('staff-count').innerText = `${filteredEmployees.length} موظف`;
+            const tbody = document.getElementById('staff-table-body');
+            if(!tbody) return;
+
+            if (filteredEmployees.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="8" class="px-4 py-6 text-center text-gray-500">لا توجد بيانات موظفين.</td></tr>`;
+                return;
+            }
+
+            let html = '';
+            filteredEmployees.forEach(emp => {
+                let badge = `<span class="px-2 py-1 bg-green-100 text-green-800 rounded-full text-xs">مستمر</span>`;
+                if(emp.status === 'مستقيل') badge = `<span class="px-2 py-1 bg-gray-200 text-gray-800 rounded-full text-xs">مستقيل</span>`;
+                if(emp.status === 'جديد') badge = `<span class="px-2 py-1 bg-blue-100 text-blue-800 rounded-full text-xs">جديد</span>`;
+
+                html += `
+                    <tr class="hover:bg-gray-50">
+                        <td class="px-4 py-3 font-medium text-gray-900 border-b">${emp.name}</td>
+                        <td class="px-4 py-3 text-gray-600 border-b font-mono text-xs">${emp.empId}</td>
+                        <td class="px-4 py-3 text-gray-600 border-b font-mono text-xs">${emp.idCard}</td>
+                        <td class="px-4 py-3 text-gray-600 border-b font-mono text-xs" dir="ltr">${emp.phone}</td>
+                        <td class="px-4 py-3 text-gray-600 border-b">${emp.job}</td>
+                        <td class="px-4 py-3 text-gray-600 border-b">${emp.generalDept}</td>
+                        <td class="px-4 py-3 text-gray-600 border-b">${emp.stage}</td>
+                        <td class="px-4 py-3 border-b">${badge}</td>
+                    </tr>
+                `;
+            });
+            tbody.innerHTML = html;
+        }
+
+        function renderDepartments() {
+            const grid = document.getElementById('departments-grid');
+            if(!grid) return;
+
+            let filteredEmployees = window.appData.employees;
+            if (window.currentUser && window.currentUser.role === 'editor') {
+                filteredEmployees = filteredEmployees.filter(e => e.generalDept === window.currentUser.department || e.stage === window.currentUser.department);
+            }
+
+            let html = '';
+            STAGES.forEach(stage => {
+                // If editor, only show their stage if applicable
+                if(window.currentUser && window.currentUser.role === 'editor' && STAGES.includes(window.currentUser.department) && stage !== window.currentUser.department) {
+                    return;
+                }
+
+                const empsInStage = filteredEmployees.filter(e => e.stage === stage);
+                const count = empsInStage.length;
+                if(count > 0 || window.currentUser?.role === 'admin') {
+                    html += `
+                        <div class="card p-6 border-t-4 border-primary-500 hover:shadow-lg transition bg-white">
+                            <div class="flex items-center justify-between mb-4">
+                                <h3 class="text-xl font-bold text-gray-800">${stage}</h3>
+                                <div class="w-12 h-12 bg-primary-100 rounded-full flex items-center justify-center text-primary-600">
+                                    <i class="fas fa-graduation-cap text-xl"></i>
+                                </div>
+                            </div>
+                            <p class="text-gray-600 text-sm flex items-center bg-gray-50 p-2 rounded mb-2"><i class="fas fa-users w-5 text-gray-400"></i> منسوبين: <span class="font-bold mx-2 text-primary-900">${count}</span></p>
+                            ${count > 0 ? `<p class="text-xs text-gray-500 pr-2">منهم ${empsInStage.filter(e=>e.status==='جديد').length} جديد</p>` : ''}
+                        </div>
+                    `;
+                }
+            });
+            grid.innerHTML = html || `<p class="col-span-3 text-center text-gray-500 py-8">لا توجد بيانات للأقسام بناءً على الصلاحيات الحالية.</p>`;
+        }
+
+        function renderAccountsManager() {
+            const tbody = document.getElementById('users-table-body');
+            if (!tbody) return;
+
+            if (!window.appData.users || window.appData.users.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="3" class="px-4 py-6 text-center text-gray-500">لا توجد حسابات مدخلين مسجلة.</td></tr>`;
+                return;
+            }
+
+            let usersHtml = '';
+            window.appData.users.forEach((user) => {
+                usersHtml += `
+                    <tr class="hover:bg-gray-50">
+                        <td class="px-4 py-3 font-medium text-gray-900 border-b">${user.email}</td>
+                        <td class="px-4 py-3 border-b"><span class="bg-blue-50 text-blue-700 border border-blue-200 px-2 py-1 rounded text-xs font-bold">${user.department}</span></td>
+                        <td class="px-4 py-3 border-b text-center">
+                            <button onclick="deleteUser('${user.id}')" class="text-red-500 hover:text-red-700 p-1.5 bg-red-50 rounded transition" title="حذف الحساب">
+                                <i class="fas fa-trash-alt"></i>
+                            </button>
+                        </td>
+                    </tr>
+                `;
+            });
+            tbody.innerHTML = usersHtml;
+        }
+
+        window.handleCreateUser = async function(e) {
+            e.preventDefault();
+            if (!auth.currentUser) return;
+
+            const email = document.getElementById('new-user-email').value;
+            const password = document.getElementById('new-user-pass').value;
+            const selectedDept = document.getElementById('new-user-dept').value;
+            
+            if (!selectedDept) {
+                Swal.fire('تنبيه', 'يجب اختيار القسم أو المرحلة.', 'warning');
+                return;
+            }
+
+            try {
+                const docId = Math.random().toString(36).substr(2, 9);
+                await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'platform_users', docId), {
+                    email, password, department: selectedDept
+                });
+                
+                document.getElementById('create-user-form').reset();
+                const Toast = Swal.mixin({ toast: true, position: 'top-end', showConfirmButton: false, timer: 3000 });
+                Toast.fire({ icon: 'success', title: 'تم إنشاء الحساب وحفظه سحابياً' });
+            } catch (err) {
+                Swal.fire('خطأ', 'تعذر حفظ الحساب.', 'error');
+            }
+        }
+
+        window.deleteUser = async function(docId) {
+            if (!auth.currentUser) return;
+            try {
+                await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'platform_users', docId));
+                const Toast = Swal.mixin({ toast: true, position: 'top-end', showConfirmButton: false, timer: 3000 });
+                Toast.fire({ icon: 'success', title: 'تم حذف الحساب بنجاح' });
+            } catch (err) {
+                Swal.fire('خطأ', 'تعذر الحذف.', 'error');
+            }
+        }
+
+        window.handleFingerprintUpload = function(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            Swal.fire({
+                title: 'جاري معالجة البصمة...',
+                text: 'مطابقة أوقات الدخول والانصراف للفترة المحددة.',
+                icon: 'info',
+                timer: 1500,
+                showConfirmButton: false
+            }).then(() => {
+                Swal.fire('اكتمل الرفع', 'تم تحديث سجل الحضور والانصراف (محاكاة).', 'success');
+                event.target.value = '';
+            });
+        }
+
+        function renderReports() {
+            const emptyState = document.getElementById('reports-empty');
+            const content = document.getElementById('reports-content');
+            
+            if (!emptyState || !content) return;
+
+            let filteredEmployees = window.appData.employees;
+            if (window.currentUser && window.currentUser.role === 'editor') {
+                filteredEmployees = filteredEmployees.filter(e => e.generalDept === window.currentUser.department || e.stage === window.currentUser.department);
+            }
+
+            if (filteredEmployees.length === 0) {
+                emptyState.classList.remove('hidden');
+                emptyState.classList.add('block');
+                content.classList.remove('grid');
+                content.classList.add('hidden');
+                return;
+            }
+
+            emptyState.classList.remove('block');
+            emptyState.classList.add('hidden');
+            content.classList.remove('hidden');
+            content.classList.add('grid');
+
+            let deptHtml = '';
+            STAGES.forEach(s => {
+                const count = filteredEmployees.filter(e => e.stage === s).length;
+                if(count > 0 || window.currentUser?.role === 'admin') {
+                    deptHtml += `
+                        <li class="flex items-center justify-between">
+                            <span class="text-gray-700 font-medium">${s}</span>
+                            <span class="text-sm font-bold bg-gray-100 rounded px-2 py-0.5">${count} موظف</span>
+                        </li>
+                    `;
+                }
+            });
+            document.getElementById('reports-dept-list').innerHTML = deptHtml;
+
+            const activeCount = filteredEmployees.filter(e => e.status === 'مستمر').length;
+            const newCount = filteredEmployees.filter(e => e.status === 'جديد').length;
+            const resignedCount = filteredEmployees.filter(e => e.status === 'مستقيل').length;
+
+            document.getElementById('reports-status-list').innerHTML = `
+                <li class="flex justify-between p-3 bg-gray-50 rounded border-r-4 border-green-500"><span>على رأس العمل</span> <span class="font-bold">${activeCount}</span></li>
+                <li class="flex justify-between p-3 bg-blue-50 rounded border-r-4 border-blue-500"><span>موظف جديد</span> <span class="font-bold">${newCount}</span></li>
+                <li class="flex justify-between p-3 bg-gray-100 rounded border-r-4 border-gray-500 text-gray-500"><span>مستقيل</span> <span class="font-bold">${resignedCount}</span></li>
+            `;
+        }
+        
+        function updateDashboardStats() {
+            let filteredEmployees = window.appData.employees;
+            if (window.currentUser && window.currentUser.role === 'editor') {
+                filteredEmployees = filteredEmployees.filter(e => e.generalDept === window.currentUser.department || e.stage === window.currentUser.department);
+            }
+
+            const totalEmps = filteredEmployees.length;
+            const statTotal = document.getElementById('stat-total-emps');
+            const statPresent = document.getElementById('stat-present');
+            const statExcused = document.getElementById('stat-excused');
+            const statAbsent = document.getElementById('stat-absent');
+            
+            if (statTotal && statPresent) {
+                statTotal.innerText = totalEmps;
+                statPresent.innerText = totalEmps > 0 ? Math.floor(totalEmps * 0.95) : 0;
+                statExcused.innerText = totalEmps > 0 ? Math.floor(totalEmps * 0.03) : 0;
+                statAbsent.innerText = totalEmps > 0 ? Math.floor(totalEmps * 0.02) : 0;
+            }
+        }
+
+        // Initialize App Auth on Load
+        document.addEventListener('DOMContentLoaded', () => {
+            initCloudStorage();
+        });
+
+    </script>
+</body>
+</html>
